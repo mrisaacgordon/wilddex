@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#5a7a42">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>WildDex — Indiana Wildlife Field Guide</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --paper: #f7f2e8; --paper-dark: #ede6d4; --paper-darker: #e0d6c0;
+  --ink: #2c2416; --ink-light: #6b5a3e; --ink-faint: #a89878;
+  --border: #c8b898; --border-light: #ddd0b8;
+  --green: #5a7a42; --green-light: #7a9a5a; --green-pale: #d4e4c0; --green-wash: #eaf2e0;
+  --rust: #8b4a2a; --rust-pale: #f0ddd0;
+  --blue: #3a5a78; --blue-pale: #d0dde8;
+  --purple: #5a3a6a; --purple-pale: #e0d0ea;
+  --teal: #2a6a5a; --teal-pale: #c8e4dc;
+  --gold: #8a6a1a; --gold-pale: #f0e4c0;
+  --shadow: rgba(44,36,22,0.08);
+  --vine: #4a6a32;
+}
+body {
+  font-family: 'Source Sans 3', sans-serif;
+  background: var(--paper); color: var(--ink); min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(90,122,66,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(58,90,120,0.05) 0%, transparent 50%);
+  position: relative; overflow-x: hidden;
+}
+
+/* ── BOTANICAL SVG DECORATIONS ── */
+.botanical-corner {
+  position: fixed; pointer-events: none; z-index: 0; opacity: 0.13;
+}
+.botanical-tl { top: 0; left: 0; }
+.botanical-br { bottom: 0; right: 0; transform: rotate(180deg); }
+.botanical-tr { top: 0; right: 0; transform: scaleX(-1); }
+
+/* Auth botanical */
+.auth-botanical {
+  position: absolute; pointer-events: none; opacity: 0.18;
+}
+
+/* ── LOADING ── */
+.loading-screen { position: fixed; inset: 0; background: var(--paper); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; gap: 16px; }
+.loading-logo { font-family: 'Playfair Display', serif; font-size: 36px; color: var(--green); }
+.loading-sub { font-family: 'Lora', serif; font-style: italic; color: var(--ink-faint); font-size: 14px; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── AUTH ── */
+.auth-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; position: relative; overflow: hidden; }
+.auth-card { background: var(--paper); border: 1.5px solid var(--border); border-radius: 4px; padding: 2.5rem; width: 100%; max-width: 400px; box-shadow: 4px 4px 0 var(--border-light), 0 4px 24px var(--shadow); position: relative; z-index: 1; }
+.auth-logo { font-family: 'Playfair Display', serif; font-size: 36px; font-weight: 700; color: var(--green); text-align: center; margin-bottom: 2px; }
+.auth-tagline { text-align: center; font-family: 'Lora', serif; font-style: italic; color: var(--ink-light); font-size: 13px; margin-bottom: 6px; }
+.auth-divider { text-align: center; margin-bottom: 1.5rem; color: var(--ink-faint); font-size: 16px; letter-spacing: 6px; }
+.auth-tabs { display: flex; margin-bottom: 1.5rem; border-bottom: 1.5px solid var(--border); }
+.auth-tab { flex: 1; padding: 10px; background: none; border: none; color: var(--ink-faint); font-family: 'Lora', serif; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1.5px; transition: all 0.2s; }
+.auth-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.field { margin-bottom: 1rem; }
+.field label { display: block; font-size: 11px; color: var(--ink-light); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+.field input, .field textarea { width: 100%; padding: 10px 12px; background: var(--paper-dark); border: 1px solid var(--border); border-radius: 3px; color: var(--ink); font-family: 'Source Sans 3', sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; }
+.field input:focus, .field textarea:focus { border-color: var(--green); background: #fff; }
+.field textarea { resize: vertical; min-height: 100px; }
+.btn-primary { width: 100%; padding: 12px; background: var(--green); border: none; border-radius: 3px; color: #fff; font-family: 'Lora', serif; font-size: 15px; cursor: pointer; transition: background 0.2s; margin-top: 0.5rem; }
+.btn-primary:hover { background: var(--green-light); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.auth-error { color: var(--rust); font-size: 13px; margin-top: 0.75rem; text-align: center; font-style: italic; }
+
+/* ── HEADER ── */
+.header { background: var(--paper-dark); border-bottom: 1.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 8px var(--shadow); position: relative; overflow: hidden; }
+.header-vine { position: absolute; right: 180px; top: 0; opacity: 0.12; pointer-events: none; }
+.header-logo { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--green); position: relative; z-index: 1; }
+.header-logo span { font-style: italic; font-weight: 400; color: var(--ink-light); font-size: 13px; margin-left: 8px; }
+.header-right { display: flex; align-items: center; gap: 1rem; position: relative; z-index: 1; }
+.sync-indicator { font-size: 11px; color: var(--ink-faint); font-family: 'Source Sans 3', sans-serif; display: flex; align-items: center; gap: 4px; }
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.sync-dot.syncing { background: var(--gold); animation: pulse 1s infinite; }
+.sync-dot.error { background: var(--rust); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.header-user { font-size: 13px; color: var(--ink-light); font-style: italic; font-family: 'Lora', serif; }
+.btn-logout { padding: 6px 14px; background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--ink-light); font-family: 'Source Sans 3', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.btn-logout:hover { border-color: var(--green); color: var(--green); }
+
+/* ── NAV ── */
+.nav { background: var(--paper); border-bottom: 1.5px solid var(--border); display: flex; overflow-x: auto; padding: 0 1rem; scrollbar-width: none; position: relative; }
+.nav::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(90,122,66,0.15), transparent); pointer-events: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav-tab { padding: 11px 18px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--ink-faint); font-family: 'Lora', serif; font-size: 14px; cursor: pointer; white-space: nowrap; transition: all 0.2s; margin-bottom: -1.5px; }
+.nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.nav-tab:hover { color: var(--ink-light); }
+
+/* ── MAIN ── */
+.main { flex: 1; padding: 1.5rem; max-width: 1100px; margin: 0 auto; width: 100%; position: relative; z-index: 1; }
+
+/* Vine side decoration */
+.main-vine-left { position: fixed; left: 0; top: 120px; pointer-events: none; opacity: 0.07; z-index: 0; }
+.main-vine-right { position: fixed; right: 0; top: 200px; pointer-events: none; opacity: 0.07; z-index: 0; transform: scaleX(-1); }
+
+/* ── STATS ── */
+.stats-bar { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.stat-card { background: var(--paper); border: 1px solid var(--border); border-radius: 3px; padding: 12px 16px; flex: 1; min-width: 110px; box-shadow: 2px 2px 0 var(--border-light); position: relative; overflow: hidden; }
+.stat-card::after { content: ''; position: absolute; bottom: -8px; right: -8px; width: 40px; height: 40px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 38 Q10 30 5 20 Q0 10 10 5 Q20 0 25 10 Q30 20 20 38Z' fill='%235a7a42' opacity='0.08'/%3E%3C/svg%3E") no-repeat; }
+.stat-label { font-size: 10px; color: var(--ink-faint); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--green); font-family: 'Playfair Display', serif; }
+.progress-bar { height: 3px; background: var(--paper-darker); border-radius: 2px; margin-top: 6px; }
+.progress-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.4s; }
+
+/* ── CONTROLS ── */
+.controls { display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
+.search-input { flex: 1; min-width: 180px; padding: 9px 14px; background: var(--paper-dark); border: 1px solid var(--border); border-radius: 3px; color: var(--ink); font-family: 'Source Sans 3', sans-serif; font-size: 14px; outline: none; transition: all 0.2s; }
+.search-input:focus { border-color: var(--green); background: #fff; }
+.filter-btn { padding: 9px 14px; background: var(--paper-dark); border: 1px solid var(--border); border-radius: 3px; color: var(--ink-faint); font-family: 'Lora', serif; font-size: 13px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.filter-btn.active { background: var(--green-wash); color: var(--green); border-color: var(--green); }
+.edit-groups-btn { padding: 9px 16px; background: var(--paper-dark); border: 1px solid var(--border); border-radius: 3px; color: var(--ink-light); font-family: 'Lora', serif; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.edit-groups-btn:hover { border-color: var(--green); color: var(--green); }
+
+/* ── GRID ── */
+.species-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 14px; }
+.species-card { background: var(--paper); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; cursor: pointer; transition: all 0.2s; box-shadow: 2px 2px 0 var(--border-light); }
+.species-card:hover { border-color: var(--green); transform: translateY(-2px); box-shadow: 3px 4px 0 var(--border); }
+.species-card.captured { border-color: var(--green); }
+.species-photo { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--paper-dark); position: relative; overflow: hidden; }
+.species-photo img { width: 100%; height: 100%; object-fit: cover; }
+.species-photo.empty { background: var(--paper-darker); }
+.question-mark { font-family: 'Playfair Display', serif; font-size: 48px; color: var(--border); font-style: italic; }
+.captured-badge { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; background: var(--green); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+.species-info { padding: 10px 10px 12px; }
+.species-num { font-size: 10px; color: var(--ink-faint); letter-spacing: 0.06em; margin-bottom: 2px; }
+.species-name { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.3; margin-bottom: 2px; font-family: 'Lora', serif; }
+.species-sci { font-size: 10px; color: var(--ink-faint); font-style: italic; font-family: 'Lora', serif; line-height: 1.3; }
+.species-tag { display: inline-block; margin-top: 7px; padding: 2px 8px; font-size: 10px; border-radius: 2px; }
+.tag-snake { background: var(--rust-pale); color: var(--rust); }
+.tag-lizard { background: var(--blue-pale); color: var(--blue); }
+.tag-turtle { background: var(--teal-pale); color: var(--teal); }
+.tag-salamander { background: var(--purple-pale); color: var(--purple); }
+.tag-frog { background: var(--green-pale); color: var(--green); }
+.tag-bird { background: var(--gold-pale); color: var(--gold); }
+.tag-custom { background: var(--paper-darker); color: var(--ink-light); }
+
+/* ── MODALS ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(44,36,22,0.55); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.modal { background: var(--paper); border: 1.5px solid var(--border); border-radius: 4px; width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; box-shadow: 6px 6px 0 var(--border-light), 0 8px 32px var(--shadow); position: relative; }
+.modal-vine { position: absolute; top: 0; right: 0; pointer-events: none; opacity: 0.1; }
+.modal-header { padding: 1.25rem 1.5rem; border-bottom: 1.5px solid var(--border-light); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; background: var(--paper-dark); position: relative; overflow: hidden; }
+.modal-header-leaf { position: absolute; bottom: -10px; left: 20px; opacity: 0.1; pointer-events: none; }
+.modal-title { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--ink); position: relative; z-index: 1; }
+.modal-sci { font-size: 13px; color: var(--ink-faint); font-style: italic; font-family: 'Lora', serif; margin-top: 2px; position: relative; z-index: 1; }
+.modal-close { background: none; border: none; color: var(--ink-faint); font-size: 22px; cursor: pointer; line-height: 1; padding: 2px; flex-shrink: 0; transition: color 0.2s; position: relative; z-index: 1; }
+.modal-close:hover { color: var(--rust); }
+.modal-body { padding: 1.5rem; }
+.modal-photo { width: 100%; aspect-ratio: 16/10; background: var(--paper-darker); border-radius: 3px; border: 1px solid var(--border); margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.modal-photo img { width: 100%; height: 100%; object-fit: cover; }
+.modal-photo.empty { flex-direction: column; gap: 8px; }
+.upload-hint { font-size: 13px; color: var(--ink-faint); font-style: italic; font-family: 'Lora', serif; }
+.upload-btn { display: block; padding: 10px 20px; background: var(--paper-dark); border: 1.5px dashed var(--border); border-radius: 3px; color: var(--green); font-family: 'Lora', serif; font-size: 14px; cursor: pointer; transition: all 0.2s; text-align: center; width: 100%; margin-bottom: 1rem; }
+.upload-btn:hover { background: var(--green-wash); border-color: var(--green); }
+input[type=file] { display: none; }
+.obs-section { background: var(--paper-dark); border: 1px solid var(--border-light); border-radius: 3px; padding: 1rem; margin-bottom: 1rem; position: relative; overflow: hidden; }
+.obs-corner-leaf { position: absolute; bottom: -5px; right: -5px; opacity: 0.1; pointer-events: none; }
+.obs-section-title { font-family: 'Playfair Display', serif; font-size: 14px; color: var(--ink-light); margin-bottom: 0.75rem; padding-bottom: 6px; border-bottom: 1px solid var(--border-light); position: relative; z-index: 1; }
+.obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; position: relative; z-index: 1; }
+.obs-field label { display: block; font-size: 10px; color: var(--ink-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.obs-field input, .obs-field textarea, .obs-field select { width: 100%; padding: 7px 10px; background: var(--paper); border: 1px solid var(--border-light); border-radius: 3px; color: var(--ink); font-family: 'Source Sans 3', sans-serif; font-size: 13px; outline: none; transition: border-color 0.2s; }
+.obs-field input:focus, .obs-field textarea:focus, .obs-field select:focus { border-color: var(--green); }
+.obs-field textarea { resize: vertical; min-height: 70px; }
+.obs-field select { cursor: pointer; }
+.obs-full { grid-column: 1 / -1; }
+.btn-save-obs { padding: 8px 18px; background: var(--green); border: none; border-radius: 3px; color: #fff; font-family: 'Lora', serif; font-size: 13px; cursor: pointer; transition: background 0.2s; position: relative; z-index: 1; }
+.btn-save-obs:hover { background: var(--green-light); }
+.obs-saved { color: var(--green); font-size: 12px; margin-left: 10px; font-style: italic; font-family: 'Lora', serif; opacity: 0; transition: opacity 0.3s; }
+.obs-saved.show { opacity: 1; }
+.modal-meta { font-size: 13px; color: var(--ink-light); line-height: 1.7; padding: 10px; background: var(--paper-dark); border: 1px solid var(--border-light); border-radius: 3px; margin-bottom: 0.75rem; font-family: 'Lora', serif; }
+.modal-meta strong { color: var(--ink); font-style: normal; font-family: 'Source Sans 3', sans-serif; }
+.btn-remove { margin-top: 0.75rem; padding: 7px 14px; background: none; border: 1px solid #c8a898; border-radius: 3px; color: var(--rust); font-family: 'Lora', serif; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.btn-remove:hover { background: var(--rust-pale); }
+
+/* ── EDIT GROUPS ── */
+.eg-tabs { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 1.25rem; }
+.eg-tab { flex: 1; padding: 9px; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1.5px; color: var(--ink-faint); font-family: 'Lora', serif; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.eg-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.group-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+.group-row { display: flex; align-items: center; justify-content: space-between; background: var(--paper-dark); border: 1px solid var(--border-light); border-radius: 3px; padding: 10px 14px; gap: 8px; }
+.group-row-name { font-size: 14px; color: var(--ink); font-family: 'Lora', serif; }
+.group-row-count { font-size: 12px; color: var(--ink-faint); }
+.group-row-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.btn-sm { padding: 5px 12px; border-radius: 3px; font-family: 'Source Sans 3', sans-serif; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--ink-light); transition: all 0.2s; white-space: nowrap; }
+.btn-sm.danger { border-color: #c8a898; color: var(--rust); }
+.btn-sm.danger:hover { background: var(--rust-pale); }
+.btn-sm.primary { border-color: var(--green); color: var(--green); }
+.btn-sm.primary:hover { background: var(--green-wash); }
+.btn-sm.warning { border-color: var(--gold); color: var(--gold); }
+.btn-sm.warning:hover { background: var(--gold-pale); }
+.divider { border: none; border-top: 1px solid var(--border-light); margin: 1rem 0; }
+.eg-section-title { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.75rem; }
+.species-edit-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; margin-bottom: 1rem; }
+.species-edit-row { display: flex; align-items: center; justify-content: space-between; background: var(--paper-dark); border: 1px solid var(--border-light); border-radius: 3px; padding: 8px 12px; gap: 8px; }
+.species-edit-name { font-size: 13px; color: var(--ink); font-family: 'Lora', serif; }
+.species-edit-sci { font-size: 11px; color: var(--ink-faint); font-style: italic; }
+.add-species-row { display: flex; gap: 8px; margin-top: 0.5rem; flex-wrap: wrap; }
+.add-species-row input { flex: 1; min-width: 110px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--border); border-radius: 3px; color: var(--ink); font-family: 'Source Sans 3', sans-serif; font-size: 13px; outline: none; }
+.add-species-row input:focus { border-color: var(--green); }
+.btn-add-sp { padding: 8px 14px; background: var(--green-wash); border: 1px solid var(--green); border-radius: 3px; color: var(--green); font-family: 'Lora', serif; font-size: 13px; cursor: pointer; }
+.btn-add-sp:hover { background: var(--green-pale); }
+.notice { font-size: 12px; color: var(--ink-faint); font-style: italic; margin-top: 6px; font-family: 'Lora', serif; }
+.inline-err { color: var(--rust); font-size: 12px; margin-top: 6px; min-height: 18px; font-style: italic; }
+.rename-row { display: flex; gap: 8px; align-items: center; margin-bottom: 1rem; }
+.rename-row input { flex: 1; padding: 9px 12px; background: var(--paper); border: 1px solid var(--border); border-radius: 3px; color: var(--ink); font-family: 'Lora', serif; font-size: 14px; outline: none; }
+.rename-row input:focus { border-color: var(--green); }
+.btn-rename { padding: 9px 16px; background: var(--green); border: none; border-radius: 3px; color: #fff; font-family: 'Lora', serif; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.empty-state { text-align: center; padding: 4rem 1rem; color: var(--ink-faint); font-size: 15px; font-family: 'Lora', serif; font-style: italic; }
+
+/* Footer botanical divider */
+.botanical-divider { text-align: center; padding: 2rem 0 1rem; opacity: 0.25; }
+
+@media (max-width: 500px) {
+  .species-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .main { padding: 1rem; } .stats-bar { gap: 8px; } .stat-card { padding: 10px 12px; }
+  .obs-grid { grid-column: 1fr; } .modal { max-width: 100%; }
+  .header-logo span { display: none; }
+  .main-vine-left, .main-vine-right { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- BOTANICAL CORNER DECORATIONS -->
+<svg class="botanical-corner botanical-tl" width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 200 Q20 150 10 100 Q0 50 30 20" stroke="#4a6a32" stroke-width="2" fill="none"/>
+  <path d="M10 160 Q40 140 60 110" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="65" cy="105" rx="18" ry="10" transform="rotate(-35 65 105)" fill="#4a6a32" opacity="0.6"/>
+  <path d="M10 120 Q45 105 55 80" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="58" cy="75" rx="15" ry="9" transform="rotate(-50 58 75)" fill="#4a6a32" opacity="0.5"/>
+  <path d="M10 80 Q35 70 40 50" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="43" cy="46" rx="13" ry="8" transform="rotate(-60 43 46)" fill="#4a6a32" opacity="0.5"/>
+  <path d="M15 200 Q60 180 80 160" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="84" cy="156" rx="20" ry="11" transform="rotate(-20 84 156)" fill="#4a6a32" opacity="0.5"/>
+  <path d="M20 200 Q80 195 110 185" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="115" cy="182" rx="22" ry="10" transform="rotate(-10 115 182)" fill="#4a6a32" opacity="0.4"/>
+  <circle cx="12" cy="198" r="4" fill="#4a6a32" opacity="0.4"/>
+  <circle cx="28" cy="32" r="3" fill="#4a6a32" opacity="0.3"/>
+</svg>
+
+<svg class="botanical-corner botanical-br" width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 200 Q20 150 10 100 Q0 50 30 20" stroke="#4a6a32" stroke-width="2" fill="none"/>
+  <path d="M10 160 Q40 140 60 110" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="65" cy="105" rx="18" ry="10" transform="rotate(-35 65 105)" fill="#4a6a32" opacity="0.6"/>
+  <path d="M10 120 Q45 105 55 80" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="58" cy="75" rx="15" ry="9" transform="rotate(-50 58 75)" fill="#4a6a32" opacity="0.5"/>
+  <path d="M15 200 Q60 180 80 160" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="84" cy="156" rx="20" ry="11" transform="rotate(-20 84 156)" fill="#4a6a32" opacity="0.5"/>
+  <circle cx="12" cy="198" r="4" fill="#4a6a32" opacity="0.4"/>
+</svg>
+
+<svg class="botanical-corner botanical-tr" width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 180 Q15 130 8 80 Q0 30 25 10" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <path d="M10 140 Q35 125 48 100" stroke="#4a6a32" stroke-width="1.2" fill="none"/>
+  <ellipse cx="52" cy="96" rx="15" ry="9" transform="rotate(-40 52 96)" fill="#4a6a32" opacity="0.5"/>
+  <path d="M10 100 Q38 88 45 65" stroke="#4a6a32" stroke-width="1.2" fill="none"/>
+  <ellipse cx="48" cy="61" rx="13" ry="7" transform="rotate(-55 48 61)" fill="#4a6a32" opacity="0.4"/>
+  <path d="M14 180 Q55 165 70 145" stroke="#4a6a32" stroke-width="1.2" fill="none"/>
+  <ellipse cx="74" cy="141" rx="17" ry="9" transform="rotate(-22 74 141)" fill="#4a6a32" opacity="0.4"/>
+</svg>
+
+<!-- SIDE VINES -->
+<svg class="main-vine-left" width="80" height="500" viewBox="0 0 80 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M40 0 Q30 80 40 160 Q50 240 35 320 Q20 400 40 500" stroke="#4a6a32" stroke-width="2" fill="none"/>
+  <path d="M40 60 Q10 70 0 90" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="-2" cy="93" rx="16" ry="9" transform="rotate(20 -2 93)" fill="#4a6a32"/>
+  <path d="M38 130 Q65 135 75 155" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="77" cy="158" rx="15" ry="8" transform="rotate(-15 77 158)" fill="#4a6a32"/>
+  <path d="M37 210 Q8 215 0 235" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="-2" cy="238" rx="16" ry="9" transform="rotate(18 -2 238)" fill="#4a6a32"/>
+  <path d="M36 290 Q62 298 72 318" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="74" cy="321" rx="14" ry="8" transform="rotate(-20 74 321)" fill="#4a6a32"/>
+  <path d="M39 370 Q12 378 4 398" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="2" cy="401" rx="15" ry="8" transform="rotate(15 2 401)" fill="#4a6a32"/>
+</svg>
+
+<svg class="main-vine-right" width="80" height="500" viewBox="0 0 80 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M40 0 Q30 80 40 160 Q50 240 35 320 Q20 400 40 500" stroke="#4a6a32" stroke-width="2" fill="none"/>
+  <path d="M40 60 Q10 70 0 90" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="-2" cy="93" rx="16" ry="9" transform="rotate(20 -2 93)" fill="#4a6a32"/>
+  <path d="M38 130 Q65 135 75 155" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="77" cy="158" rx="15" ry="8" transform="rotate(-15 77 158)" fill="#4a6a32"/>
+  <path d="M37 210 Q8 215 0 235" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="-2" cy="238" rx="16" ry="9" transform="rotate(18 -2 238)" fill="#4a6a32"/>
+  <path d="M36 290 Q62 298 72 318" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+  <ellipse cx="74" cy="321" rx="14" ry="8" transform="rotate(-20 74 321)" fill="#4a6a32"/>
+</svg>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loading-screen">
+  <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;margin-bottom:4px">
+    <path d="M30 55 Q15 40 10 25 Q5 10 20 5 Q30 2 35 15 Q40 28 30 55Z" fill="#5a7a42"/>
+    <path d="M30 55 Q45 38 50 22 Q55 8 40 5 Q30 2 28 16 Q26 30 30 55Z" fill="#4a6a32"/>
+  </svg>
+  <div class="loading-logo">WildDex</div>
+  <div class="spinner"></div>
+  <div class="loading-sub">Loading your field guide...</div>
+</div>
+
+<!-- AUTH -->
+<div id="auth-screen" class="auth-screen" style="display:none">
+  <!-- Auth botanical decorations -->
+  <svg class="auth-botanical" style="top:0;left:0;width:200px;height:200px" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 180 Q20 130 15 80 Q8 30 35 10" stroke="#4a6a32" stroke-width="2" fill="none"/>
+    <path d="M14 140 Q45 130 58 108" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+    <ellipse cx="62" cy="104" rx="18" ry="10" transform="rotate(-35 62 104)" fill="#4a6a32"/>
+    <path d="M13 100 Q46 90 52 68" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+    <ellipse cx="55" cy="64" rx="15" ry="9" transform="rotate(-50 55 64)" fill="#4a6a32"/>
+    <path d="M16 180 Q55 168 72 148" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+    <ellipse cx="76" cy="144" rx="19" ry="10" transform="rotate(-22 76 144)" fill="#4a6a32"/>
+  </svg>
+  <svg class="auth-botanical" style="bottom:0;right:0;width:200px;height:200px;transform:rotate(180deg)" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 180 Q20 130 15 80 Q8 30 35 10" stroke="#4a6a32" stroke-width="2" fill="none"/>
+    <path d="M14 140 Q45 130 58 108" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+    <ellipse cx="62" cy="104" rx="18" ry="10" transform="rotate(-35 62 104)" fill="#4a6a32"/>
+    <path d="M16 180 Q55 168 72 148" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+    <ellipse cx="76" cy="144" rx="19" ry="10" transform="rotate(-22 76 144)" fill="#4a6a32"/>
+  </svg>
+  <div class="auth-card">
+    <div style="text-align:center;margin-bottom:8px">
+      <svg width="36" height="44" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity:0.7">
+        <path d="M18 42 Q5 28 4 16 Q3 4 14 2 Q18 1 20 8 Q22 15 18 42Z" fill="#5a7a42"/>
+        <path d="M18 42 Q31 26 32 14 Q33 3 22 2 Q18 1 17 9 Q16 18 18 42Z" fill="#4a6a32"/>
+        <path d="M18 42 L18 15" stroke="#3a5a28" stroke-width="1" opacity="0.5"/>
+        <path d="M18 20 Q10 18 7 12" stroke="#3a5a28" stroke-width="0.8" opacity="0.4" fill="none"/>
+        <path d="M18 28 Q26 26 29 20" stroke="#3a5a28" stroke-width="0.8" opacity="0.4" fill="none"/>
+      </svg>
+    </div>
+    <div class="auth-logo">WildDex</div>
+    <div class="auth-tagline">Indiana Wildlife Field Guide</div>
+    <div class="auth-divider">· · ·</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">Create Account</button>
+    </div>
+    <div class="field"><label>Username</label><input type="text" id="auth-username" placeholder="your username" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn-primary" id="auth-btn" onclick="handleAuth()">Sign In</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="main-app" style="display:none;flex-direction:column;min-height:100vh;">
+  <div class="header" style="position:sticky;top:0;z-index:100;overflow:hidden;">
+    <svg class="header-vine" width="200" height="58" viewBox="0 0 200 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 30 Q50 20 100 30 Q150 40 200 25" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+      <path d="M40 30 Q45 15 55 10" stroke="#4a6a32" stroke-width="1" fill="none"/>
+      <ellipse cx="57" cy="8" rx="10" ry="6" transform="rotate(-30 57 8)" fill="#4a6a32"/>
+      <path d="M100 30 Q105 45 115 50" stroke="#4a6a32" stroke-width="1" fill="none"/>
+      <ellipse cx="117" cy="52" rx="10" ry="6" transform="rotate(20 117 52)" fill="#4a6a32"/>
+      <path d="M160 27 Q162 12 172 8" stroke="#4a6a32" stroke-width="1" fill="none"/>
+      <ellipse cx="174" cy="6" rx="9" ry="5" transform="rotate(-25 174 6)" fill="#4a6a32"/>
+    </svg>
+    <div class="header-logo">WildDex <span>Indiana Field Guide</span></div>
+    <div class="header-right">
+      <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Synced</span></div>
+      <span class="header-user" id="header-user"></span>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+  <div class="nav" id="nav-tabs"></div>
+  <div class="main">
+    <div class="stats-bar" id="stats-bar"></div>
+    <div class="controls">
+      <input type="text" class="search-input" id="search-input" placeholder="Search species..." oninput="renderGrid()">
+      <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" id="filter-captured" onclick="setFilter('captured')">Photographed</button>
+      <button class="filter-btn" id="filter-missing" onclick="setFilter('missing')">Still needed</button>
+      <button class="edit-groups-btn" onclick="showEditGroups()">Edit groups</button>
+    </div>
+    <div class="species-grid" id="species-grid"></div>
+    <div class="botanical-divider">
+      <svg width="300" height="40" viewBox="0 0 300 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 20 Q75 10 150 20 Q225 30 300 20" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+        <path d="M60 20 Q65 8 75 4" stroke="#4a6a32" stroke-width="1" fill="none"/>
+        <ellipse cx="77" cy="3" rx="9" ry="5" transform="rotate(-20 77 3)" fill="#4a6a32"/>
+        <path d="M150 20 Q155 32 165 36" stroke="#4a6a32" stroke-width="1" fill="none"/>
+        <ellipse cx="167" cy="37" rx="9" ry="5" transform="rotate(15 167 37)" fill="#4a6a32"/>
+        <path d="M240 20 Q244 8 254 4" stroke="#4a6a32" stroke-width="1" fill="none"/>
+        <ellipse cx="256" cy="3" rx="8" ry="5" transform="rotate(-22 256 3)" fill="#4a6a32"/>
+        <circle cx="150" cy="20" r="3" fill="#4a6a32" opacity="0.5"/>
+        <circle cx="75" cy="20" r="2" fill="#4a6a32" opacity="0.4"/>
+        <circle cx="225" cy="20" r="2" fill="#4a6a32" opacity="0.4"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- SPECIES MODAL -->
+<div class="modal-overlay" id="species-modal" style="display:none" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <svg class="modal-vine" width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M90 5 Q70 30 80 60 Q90 80 75 95" stroke="#4a6a32" stroke-width="1.5" fill="none"/>
+      <path d="M82 30 Q65 28 58 18" stroke="#4a6a32" stroke-width="1" fill="none"/>
+      <ellipse cx="55" cy="15" rx="12" ry="7" transform="rotate(20 55 15)" fill="#4a6a32"/>
+      <path d="M80 60 Q95 55 98 45" stroke="#4a6a32" stroke-width="1" fill="none"/>
+      <ellipse cx="99" cy="42" rx="10" ry="6" transform="rotate(-15 99 42)" fill="#4a6a32"/>
+    </svg>
+    <div class="modal-header">
+      <svg class="modal-header-leaf" width="60" height="30" viewBox="0 0 60 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 28 Q20 15 40 5 Q55 0 58 10 Q60 20 45 25 Q28 30 5 28Z" fill="#4a6a32"/>
+      </svg>
+      <div><div class="modal-title" id="modal-name"></div><div class="modal-sci" id="modal-sci"></div></div>
+      <button class="modal-close" onclick="closeSpeciesModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-photo" id="modal-photo-wrap"></div>
+      <label class="upload-btn" for="file-input">📷  Upload your photo</label>
+      <input type="file" id="file-input" accept="image/*" onchange="handleUpload(event)">
+      <div id="modal-remove-btn"></div>
+      <div class="obs-section">
+        <svg class="obs-corner-leaf" width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M48 48 Q30 35 10 40 Q0 43 2 30 Q5 15 25 10 Q45 5 48 48Z" fill="#4a6a32"/>
+        </svg>
+        <div class="obs-section-title">Observation Details</div>
+        <div class="obs-grid">
+          <div class="obs-field"><label>Date</label><input type="date" id="obs-date"></div>
+          <div class="obs-field"><label>Time</label><input type="time" id="obs-time"></div>
+          <div class="obs-field obs-full"><label>Location</label><input type="text" id="obs-location" placeholder="e.g. Goose Pond FWA, Greene Co."></div>
+          <div class="obs-field">
+            <label>Weather</label>
+            <select id="obs-weather">
+              <option value="">—</option>
+              <option>Sunny</option><option>Partly cloudy</option><option>Overcast</option>
+              <option>Rainy</option><option>Foggy</option><option>Windy</option><option>After rain</option>
+            </select>
+          </div>
+          <div class="obs-field"><label>Behavior observed</label><input type="text" id="obs-behavior" placeholder="e.g. basking, hunting"></div>
+          <div class="obs-field obs-full"><label>Animal details</label><input type="text" id="obs-details" placeholder="e.g. adult male, ~60cm, juvenile coloring"></div>
+          <div class="obs-field obs-full"><label>Notes</label><textarea id="obs-notes" placeholder="Anything else worth remembering about this sighting..."></textarea></div>
+        </div>
+        <button class="btn-save-obs" onclick="saveObs()">Save observation</button>
+        <span class="obs-saved" id="obs-saved-msg">Saved ✓</span>
+      </div>
+      <div class="modal-meta" id="modal-meta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT GROUPS MODAL -->
+<div class="modal-overlay" id="editgroups-modal" style="display:none" onclick="closeModal(event)">
+  <div class="modal" style="max-width:560px" onclick="event.stopPropagation()">
+    <div class="modal-header"><div class="modal-title">Edit groups</div><button class="modal-close" onclick="document.getElementById('editgroups-modal').style.display='none'">×</button></div>
+    <div class="modal-body" id="editgroups-body"></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL='https://ttmaecpdbnrcddhfsnfr.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0bWFlY3BkYm5yY2RkaGZzbmZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1MDUxOTUsImV4cCI6MjA5MzA4MTE5NX0.PX3Q8FzZqDY-fGh7LfZKRhAnycev9_4gIhXNpY96h_0';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const SPECIES_DATA={snakes:{label:"Snakes",color:"tag-snake",species:[{name:"Eastern Garter Snake",sci:"Thamnophis sirtalis sirtalis",notes:"Most common Indiana snake. Harmless. Diverse habitats."},{name:"Northern Water Snake",sci:"Nerodia sipedon sipedon",notes:"Often mistaken for cottonmouth. Harmless. Aquatic habitats."},{name:"Eastern Racer",sci:"Coluber constrictor",notes:"Fast, slender. Harmless but defensive. Open fields and woodland edges."},{name:"Ring-necked Snake",sci:"Diadophis punctatus",notes:"Small, secretive. Orange ring around neck. Under logs and rocks."},{name:"DeKay's Brownsnake",sci:"Storeria dekayi",notes:"Small, urban-tolerant. Common in gardens and parks."},{name:"Red-bellied Snake",sci:"Storeria occipitomaculata",notes:"Tiny. Bright red belly. Forest edges."},{name:"Eastern Milksnake",sci:"Lampropeltis triangulum",notes:"Often mistaken for copperhead. Harmless. Beautiful pattern."},{name:"Black Kingsnake",sci:"Lampropeltis nigra",notes:"Glossy black. Eats other snakes including venomous species."},{name:"Smooth Green Snake",sci:"Opheodrys vernalis",notes:"Bright emerald green. Grasslands and meadows."},{name:"Rough Green Snake",sci:"Opheodrys aestivus",notes:"Slender, arboreal. Shrubs overhanging water."},{name:"Eastern Hog-nosed Snake",sci:"Heterodon platirhinos",notes:"Dramatic death-feigning behavior. Upturned snout."},{name:"Eastern Ratsnake",sci:"Pantherophis alleghaniensis",notes:"Large, excellent climber. Old farm country staple."},{name:"Gray Ratsnake",sci:"Pantherophis spiloides",notes:"Blotched pattern in youth, often gray as adult."},{name:"Kirtland's Snake",sci:"Clonophis kirtlandii",notes:"Rare. Wetland species. State Species of Special Concern."},{name:"Western Ribbonsnake",sci:"Thamnophis proximus",notes:"Slender, striped. Wetland edges."},{name:"Massasauga Rattlesnake",sci:"Sistrurus catenatus",notes:"VENOMOUS. State endangered. Small rattlesnake of wetlands."},{name:"Timber Rattlesnake",sci:"Crotalus horridus",notes:"VENOMOUS. State special concern. Forest and rocky outcrops."},{name:"Eastern Copperhead",sci:"Agkistrodon contortrix",notes:"VENOMOUS. Hourglass pattern. Southern Indiana forests."},{name:"Cottonmouth",sci:"Agkistrodon piscivorus",notes:"VENOMOUS. Rare in Indiana. Extreme southwest only."},{name:"Eastern Wormsnake",sci:"Carphophis amoenus",notes:"Tiny, fossorial. Pinkish belly. Under rocks in forests."},{name:"Midland Mudsnake",sci:"Farancia abacura",notes:"Large, glossy. Aquatic. Feeds on sirens and amphiumas."},{name:"Queen Snake",sci:"Regina septemvittata",notes:"Strictly aquatic. Eats crayfish. Clean streams."},{name:"Graham's Crayfish Snake",sci:"Regina grahamii",notes:"Prairie wetlands. Feeds on crayfish."}]},lizards:{label:"Lizards",color:"tag-lizard",species:[{name:"Common Five-lined Skink",sci:"Plestiodon fasciatus",notes:"Most common Indiana lizard. Blue tail in juveniles."},{name:"Broad-headed Skink",sci:"Plestiodon laticeps",notes:"Largest Indiana skink. Males have reddish-orange head."},{name:"Little Brown Skink",sci:"Scincella lateralis",notes:"Tiny, secretive. Leaf litter in southern Indiana forests."},{name:"Six-lined Racerunner",sci:"Aspidoscelis sexlineata",notes:"Fast. Open sandy areas. Southern Indiana."},{name:"Eastern Fence Lizard",sci:"Sceloporus undulatus",notes:"Rough scales, climbs trees and fences. Southern Indiana."},{name:"Slender Glass Lizard",sci:"Ophisaurus attenuatus",notes:"Legless lizard. Long tail. Sandy habitats. Rare."}]},turtles:{label:"Turtles",color:"tag-turtle",species:[{name:"Common Snapping Turtle",sci:"Chelydra serpentina",notes:"Large and prehistoric-looking. Aggressive on land."},{name:"Alligator Snapping Turtle",sci:"Macrochelys temminckii",notes:"Massive. Rare in Indiana. Worm-like lure on tongue."},{name:"Painted Turtle",sci:"Chrysemys picta",notes:"Most common basking turtle. Colorful shell edges."},{name:"Midland Smooth Softshell",sci:"Apalone mutica",notes:"Flexible leathery shell. Fast swimmer."},{name:"Spiny Softshell",sci:"Apalone spinifera",notes:"Spiny projections on shell front. Sandy river bars."},{name:"Blanding's Turtle",sci:"Emydoidea blandingii",notes:"State endangered. Bright yellow chin. Long-lived."},{name:"Eastern Box Turtle",sci:"Terrapene carolina",notes:"Terrestrial. Domed shell that closes completely."},{name:"Wood Turtle",sci:"Glyptemys insculpta",notes:"Rare. Sculptured shell. Stream corridors."},{name:"Map Turtle",sci:"Graptemys geographica",notes:"River turtle. Map-like markings on shell."},{name:"Ouachita Map Turtle",sci:"Graptemys ouachitensis",notes:"Similar to map turtle. Mississippi drainage."},{name:"Red-eared Slider",sci:"Trachemys scripta elegans",notes:"Common basker. Red ear mark. Often from pet releases."},{name:"Spotted Turtle",sci:"Clemmys guttata",notes:"State endangered. Rare. Small with yellow spots."},{name:"Eastern Musk Turtle",sci:"Sternotherus odoratus",notes:"Small, aquatic. Releases musky odor when handled."}]},salamanders:{label:"Salamanders",color:"tag-salamander",species:[{name:"Spotted Salamander",sci:"Ambystoma maculatum",notes:"Large, secretive. Yellow spots. Vernal pool breeder."},{name:"Jefferson Salamander",sci:"Ambystoma jeffersonianum",notes:"Early spring breeder. Slate gray, long limbs."},{name:"Smallmouth Salamander",sci:"Ambystoma texanum",notes:"Gray with lichen-like markings. Breeds in winter."},{name:"Tiger Salamander",sci:"Ambystoma tigrinum",notes:"Large, robust. Yellow and black. Burrows."},{name:"Marbled Salamander",sci:"Ambystoma opacum",notes:"Black with white crossbands. Fall breeder."},{name:"Red-backed Salamander",sci:"Plethodon cinereus",notes:"Most abundant Indiana salamander. Two color phases."},{name:"Zigzag Salamander",sci:"Plethodon dorsalis",notes:"Zigzag stripe. Southern Indiana limestone areas."},{name:"Ravine Salamander",sci:"Plethodon richmondi",notes:"Long, slender. Hillside seeps in southern Indiana."},{name:"Slimy Salamander",sci:"Plethodon glutinosus",notes:"Black with white spots. Sticky skin secretions."},{name:"Cave Salamander",sci:"Eurycea lucifuga",notes:"Orange-red with spots. Cave and cliff faces."},{name:"Long-tailed Salamander",sci:"Eurycea longicauda",notes:"Long tail, yellow with black spots. Springs and streams."},{name:"Northern Two-lined Salamander",sci:"Eurycea bislineata",notes:"Yellow with two dark stripes. Rocky streams."},{name:"Spring Salamander",sci:"Gyrinophilus porphyriticus",notes:"Large, salmon-colored. Cold springs. Southern Indiana."},{name:"Mudpuppy",sci:"Necturus maculosus",notes:"Fully aquatic, never metamorphoses. Bushy red gills."},{name:"Red-spotted Newt",sci:"Notophthalmus viridescens",notes:"Three life stages. Red eft juveniles wander on land."},{name:"Hellbender",sci:"Cryptobranchus alleganiensis",notes:"Giant aquatic salamander. Endangered. Clean, rocky rivers."},{name:"Lesser Siren",sci:"Siren intermedia",notes:"Eel-like, two front legs only. Muddy ponds."}]},frogs:{label:"Frogs & Toads",color:"tag-frog",species:[{name:"American Bullfrog",sci:"Lithobates catesbeianus",notes:"Largest Indiana frog. Deep jug-o-rum call."},{name:"Green Frog",sci:"Lithobates clamitans",notes:"Common pond frog. Twangy banjo-string call."},{name:"Northern Leopard Frog",sci:"Lithobates pipiens",notes:"Spotted, grassland frog. Snoring call."},{name:"Southern Leopard Frog",sci:"Lithobates sphenocephalus",notes:"Similar to northern. Southern Indiana."},{name:"Pickerel Frog",sci:"Lithobates palustris",notes:"Square spots in rows. Mild skin toxins. Cold streams."},{name:"Wood Frog",sci:"Lithobates sylvaticus",notes:"Robber's mask. Freezes solid in winter. Early breeder."},{name:"Crawfish Frog",sci:"Lithobates areolatus",notes:"Uses crawfish burrows. State special concern."},{name:"American Toad",sci:"Anaxyrus americanus",notes:"Most common toad. Long musical trill."},{name:"Fowler's Toad",sci:"Anaxyrus fowleri",notes:"Similar to American toad. Harsh bleating call."},{name:"Eastern Spadefoot Toad",sci:"Scaphiopus holbrookii",notes:"Vertical pupils. Explosive breeder after heavy rain."},{name:"Eastern Gray Treefrog",sci:"Hyla versicolor",notes:"Changes color. Loud trilling call from treetops."},{name:"Cope's Gray Treefrog",sci:"Hyla chrysoscelis",notes:"Identical to Eastern gray. Faster trill. Diploid."},{name:"Spring Peeper",sci:"Pseudacris crucifer",notes:"X on back. Loud high-pitched peep. First spring voice."},{name:"Western Chorus Frog",sci:"Pseudacris triseriata",notes:"Tiny. Finger-on-comb call. Vernal pools."},{name:"Boreal Chorus Frog",sci:"Pseudacris maculata",notes:"Northern Indiana. Similar to western chorus frog."},{name:"Mountain Chorus Frog",sci:"Pseudacris brachyphona",notes:"Rare. Southern hills. Reverse parentheses markings."},{name:"Bird-voiced Treefrog",sci:"Hyla avivoca",notes:"Rare. Extreme southwest Indiana. Birdlike call."},{name:"Plains Leopard Frog",sci:"Lithobates blairi",notes:"Western Indiana. Spotted. Chuckling call."}]},birds:{label:"Birds",color:"tag-bird",species:[{name:"American Robin",sci:"Turdus migratorius",notes:"Year-round. Red-orange breast. Familiar yard bird."},{name:"Northern Cardinal",sci:"Cardinalis cardinalis",notes:"Year-round. Brilliant red male. Sings year-round."},{name:"Blue Jay",sci:"Cyanocitta cristata",notes:"Year-round. Loud, bold, intelligent."},{name:"Black-capped Chickadee",sci:"Poecile atricapillus",notes:"Year-round north. Acrobatic. Tiny."},{name:"Carolina Chickadee",sci:"Poecile carolinensis",notes:"Year-round south Indiana."},{name:"Tufted Titmouse",sci:"Baeolophus bicolor",notes:"Year-round. Gray crest. Loud peter-peter call."},{name:"White-breasted Nuthatch",sci:"Sitta carolinensis",notes:"Year-round. Walks headfirst down trees."},{name:"Downy Woodpecker",sci:"Picoides pubescens",notes:"Smallest woodpecker. Year-round. Common feeder bird."},{name:"Hairy Woodpecker",sci:"Leuconotopicus villosus",notes:"Larger than downy. Year-round. Longer bill."},{name:"Red-bellied Woodpecker",sci:"Melanerpes carolinus",notes:"Year-round. Red cap. Loud churr call."},{name:"Pileated Woodpecker",sci:"Dryocopus pileatus",notes:"Crow-sized. Loud. Rectangular excavations in dead trees."},{name:"Northern Flicker",sci:"Colaptes auratus",notes:"Brownish woodpecker. Spots on breast. Ant specialist."},{name:"American Crow",sci:"Corvus brachyrhynchos",notes:"Year-round. Highly intelligent. Roosts in large flocks."},{name:"Eastern Bluebird",sci:"Sialia sialis",notes:"Cavity nester. Brilliant blue and rust. Nest boxes."},{name:"American Goldfinch",sci:"Spinus tristis",notes:"Bright yellow male in summer. Thistle seed lover."},{name:"House Finch",sci:"Haemorhous mexicanus",notes:"Year-round. Red-headed male. Common at feeders."},{name:"Dark-eyed Junco",sci:"Junco hyemalis",notes:"Winter visitor. Slate gray and white. Snowbird."},{name:"White-throated Sparrow",sci:"Zonotrichia albicollis",notes:"Winter visitor. White throat patch."},{name:"Song Sparrow",sci:"Melospiza melodia",notes:"Year-round. Heavy breast streaking. Complex song."},{name:"House Sparrow",sci:"Passer domesticus",notes:"Year-round. Non-native. Ubiquitous in towns."},{name:"European Starling",sci:"Sturnus vulgaris",notes:"Year-round. Non-native. Iridescent in spring."},{name:"Red-winged Blackbird",sci:"Agelaius phoeniceus",notes:"Marsh breeder. Males with red shoulder patches."},{name:"Common Grackle",sci:"Quiscalus quiscula",notes:"Iridescent black. Yellow eye. Large flocks."},{name:"Baltimore Oriole",sci:"Icterus galbula",notes:"Summer breeder. Flame orange and black. Pendant nest."},{name:"Eastern Meadowlark",sci:"Sturnella magna",notes:"Declining. Yellow breast, V-shaped necklace. Meadows."},{name:"Ruby-throated Hummingbird",sci:"Archilochus colubris",notes:"Summer only. Only nesting hummingbird in Indiana."},{name:"Chimney Swift",sci:"Chaetura pelagica",notes:"Summer. Cigar with wings. Chatters overhead in evenings."},{name:"Barn Swallow",sci:"Hirundo rustica",notes:"Summer. Deeply forked tail. Nests on structures."},{name:"Tree Swallow",sci:"Tachycineta bicolor",notes:"Summer. Iridescent blue-green. Nest boxes."},{name:"Purple Martin",sci:"Progne subis",notes:"Summer. Largest swallow. Colony nesting in martin houses."},{name:"Eastern Kingbird",sci:"Tyrannus tyrannus",notes:"Summer. White tail tip. Aggressive flycatcher."},{name:"Scarlet Tanager",sci:"Piranga olivacea",notes:"Summer. Males electric red and black. Forest interior."},{name:"Rose-breasted Grosbeak",sci:"Pheucticus ludovicianus",notes:"Summer breeder north. Rose triangle on white breast."},{name:"Indigo Bunting",sci:"Passerina cyanea",notes:"Summer. All-blue male. Common in brushy openings."},{name:"Canada Goose",sci:"Branta canadensis",notes:"Year-round. Large flocks. Urban parks and farms."},{name:"Mallard",sci:"Anas platyrhynchos",notes:"Year-round. Green-headed male. Most common duck."},{name:"Wood Duck",sci:"Aix sponsa",notes:"Summer breeder. Iridescent. Nest boxes near water."},{name:"Great Blue Heron",sci:"Ardea herodias",notes:"Year-round. Tall, gray. Slow flapping flight."},{name:"Great Egret",sci:"Ardea alba",notes:"Summer. All white, yellow bill, black legs."},{name:"Green Heron",sci:"Butorides virescens",notes:"Summer. Small, stocky. Uses lures to fish."},{name:"Sandhill Crane",sci:"Antigone canadensis",notes:"Migrant. Bugling call. Large flocks in spring."},{name:"Killdeer",sci:"Charadrius vociferus",notes:"Year-round. Double breast bands. Loud kill-deer call."},{name:"Red-tailed Hawk",sci:"Buteo jamaicensis",notes:"Year-round. Rusty tail. Most common hawk."},{name:"Cooper's Hawk",sci:"Accipiter cooperii",notes:"Year-round. Pursues birds through trees."},{name:"Bald Eagle",sci:"Haliaeetus leucocephalus",notes:"Year-round. Recovering strongly. Lakes and rivers."},{name:"Osprey",sci:"Pandion haliaetus",notes:"Summer migrant/breeder. Dives feet-first for fish."},{name:"American Kestrel",sci:"Falco sparverius",notes:"Year-round. Smallest falcon. Hovering hunter. Declining."},{name:"Peregrine Falcon",sci:"Falco peregrinus",notes:"Year-round. Fastest animal. Urban cliff buildings."},{name:"Barred Owl",sci:"Strix varia",notes:"Year-round. Who cooks for you? Moist forests."},{name:"Great Horned Owl",sci:"Bubo virginianus",notes:"Year-round. Large ear tufts. Early nester."},{name:"Eastern Screech-Owl",sci:"Megascops asio",notes:"Year-round. Small. Two color morphs. Cavity nester."},{name:"Belted Kingfisher",sci:"Megaceryle alcyon",notes:"Year-round. Rattling call. Dives for fish."},{name:"Wild Turkey",sci:"Meleagris gallopavo",notes:"Year-round. Recovering. Forests with clearings."},{name:"American Woodcock",sci:"Scolopax minor",notes:"Early spring migrant/breeder. Sky dance display."},{name:"Cedar Waxwing",sci:"Bombycilla cedrorum",notes:"Year-round. Sleek, crested. Fruit lover."},{name:"Yellow Warbler",sci:"Setophaga petechia",notes:"Summer. All-yellow. Willows near water."},{name:"Common Yellowthroat",sci:"Geothlypis trichas",notes:"Summer. Male has black mask. Witchety song."},{name:"Ovenbird",sci:"Seiurus aurocapilla",notes:"Summer. Teacher-teacher song. Walks on forest floor."}]}};
+
+// Group label overrides (user renames)
+let groupLabels={};
+
+let currentUser=null,userId=null,currentGroup='snakes',currentFilter='all',currentSpecies=null,authMode='login',egMode='manage',egEditKey=null;
+let photos={},observations={},customGroups={},removedSpecies={};
+
+function setSyncing(){document.getElementById('sync-dot').className='sync-dot syncing';document.getElementById('sync-label').textContent='Syncing...';}
+function setSynced(){document.getElementById('sync-dot').className='sync-dot';document.getElementById('sync-label').textContent='Synced';}
+function setSyncError(){document.getElementById('sync-dot').className='sync-dot error';document.getElementById('sync-label').textContent='Offline';}
+
+function switchAuthTab(m){authMode=m;document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&m==='login')||(i===1&&m==='register')));document.getElementById('auth-error').textContent='';document.getElementById('auth-btn').textContent=m==='login'?'Sign In':'Create Account';}
+
+async function handleAuth(){
+  const u=document.getElementById('auth-username').value.trim(),p=document.getElementById('auth-password').value,err=document.getElementById('auth-error'),btn=document.getElementById('auth-btn');
+  if(!u||!p){err.textContent='Please fill in all fields.';return;}
+  if(p.length<4){err.textContent='Password must be at least 4 characters.';return;}
+  btn.disabled=true;btn.textContent='Please wait...';
+  try{
+    if(authMode==='register'){
+      const{data:ex}=await sb.from('users').select('id').eq('username',u).single();
+      if(ex){err.textContent='Username already taken.';btn.disabled=false;btn.textContent='Create Account';return;}
+      const{data,error}=await sb.from('users').insert({username:u,password:p}).select().single();
+      if(error)throw error;
+      userId=data.id;currentUser=u;
+    }else{
+      const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+      if(error||!data){err.textContent='Invalid username or password.';btn.disabled=false;btn.textContent='Sign In';return;}
+      userId=data.id;currentUser=u;
+    }
+    await loadAllData();
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('main-app').style.display='flex';
+    document.getElementById('header-user').textContent=u;
+    buildNav();renderStats();renderGrid();
+  }catch(e){err.textContent='Connection error. Please try again.';btn.disabled=false;btn.textContent=authMode==='login'?'Sign In':'Create Account';}
+}
+
+async function logout(){
+  currentUser=null;userId=null;photos={};observations={};customGroups={};removedSpecies={};groupLabels={};
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('auth-username').value='';document.getElementById('auth-password').value='';
+  document.getElementById('auth-btn').disabled=false;document.getElementById('auth-btn').textContent='Sign In';
+}
+
+async function loadAllData(){
+  setSyncing();
+  try{
+    const[ph,obs,cg,rs,gl]=await Promise.all([
+      sb.from('photos').select('*').eq('user_id',userId),
+      sb.from('observations').select('*').eq('user_id',userId),
+      sb.from('custom_groups').select('*').eq('user_id',userId),
+      sb.from('removed_species').select('*').eq('user_id',userId),
+      sb.from('group_labels').select('*').eq('user_id',userId)
+    ]);
+    photos={};(ph.data||[]).forEach(r=>photos[r.species_key]=r.photo_data);
+    observations={};(obs.data||[]).forEach(r=>observations[r.species_key]={date:r.obs_date,time:r.obs_time,location:r.location,weather:r.weather,behavior:r.behavior,details:r.details,notes:r.notes});
+    customGroups={};(cg.data||[]).forEach(r=>customGroups[r.group_name]=r.species_data||[]);
+    removedSpecies={};(rs.data||[]).forEach(r=>{if(!removedSpecies[r.group_key])removedSpecies[r.group_key]=[];removedSpecies[r.group_key].push(r.sci_name);});
+    groupLabels={};(gl.data||[]).forEach(r=>groupLabels[r.group_key]=r.label);
+    setSynced();
+  }catch(e){setSyncError();}
+}
+
+function getGroupLabel(key){return groupLabels[key]||(SPECIES_DATA[key]?SPECIES_DATA[key].label:key.replace('custom_',''));}
+
+function getAllGroups(){
+  const built=Object.entries(SPECIES_DATA).map(([k,v])=>({key:k,label:getGroupLabel(k),color:v.color,builtin:true,species:v.species.filter(s=>!(removedSpecies[k]||[]).includes(s.sci))}));
+  const custom=Object.entries(customGroups).map(([k,v])=>({key:'custom_'+k,label:getGroupLabel('custom_'+k)||k,color:'tag-custom',builtin:false,species:Array.isArray(v)?v:[]}));
+  return[...built,...custom];
+}
+
+function buildNav(){const nav=document.getElementById('nav-tabs');nav.innerHTML='';getAllGroups().forEach(g=>{const b=document.createElement('button');b.className='nav-tab'+(g.key===currentGroup?' active':'');b.textContent=g.label;b.onclick=()=>{currentGroup=g.key;currentFilter='all';document.getElementById('search-input').value='';buildNav();renderStats();renderGrid();};nav.appendChild(b);});}
+function getCurrentGroupData(){return getAllGroups().find(g=>g.key===currentGroup)||getAllGroups()[0];}
+function renderStats(){const g=getCurrentGroupData(),total=g.species.length,cap=g.species.filter(s=>photos[currentGroup+'_'+s.sci]).length,pct=total>0?Math.round(cap/total*100):0;document.getElementById('stats-bar').innerHTML=`<div class="stat-card"><div class="stat-label">${g.label} photographed</div><div class="stat-value">${cap} / ${total}</div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div><div class="stat-card"><div class="stat-label">Completion</div><div class="stat-value">${pct}%</div></div><div class="stat-card"><div class="stat-label">Still needed</div><div class="stat-value">${total-cap}</div></div>`;}
+function setFilter(f){currentFilter=f;['all','captured','missing'].forEach(x=>document.getElementById('filter-'+x).classList.toggle('active',x===f));renderGrid();}
+function renderGrid(){const g=getCurrentGroupData(),search=document.getElementById('search-input').value.toLowerCase();let sp=g.species.filter(s=>{const has=!!photos[currentGroup+'_'+s.sci];if(currentFilter==='captured'&&!has)return false;if(currentFilter==='missing'&&has)return false;if(search&&!s.name.toLowerCase().includes(search)&&!s.sci.toLowerCase().includes(search))return false;return true;});const grid=document.getElementById('species-grid');if(!sp.length){grid.innerHTML='<div class="empty-state">No species match your filters.</div>';return;}grid.innerHTML=sp.map(s=>{const key=currentGroup+'_'+s.sci,photo=photos[key],num=String(g.species.indexOf(s)+1).padStart(3,'0');return`<div class="species-card ${photo?'captured':''}" onclick="openSpecies('${currentGroup}','${s.sci.replace(/'/g,"\\'")}')"><div class="species-photo ${photo?'':'empty'}">${photo?`<img src="${photo}" alt="${s.name}">`:'<div class="question-mark">?</div>'}${photo?'<div class="captured-badge">✓</div>':''}</div><div class="species-info"><div class="species-num">#${num}</div><div class="species-name">${s.name}</div><div class="species-sci">${s.sci}</div><span class="species-tag ${g.color}">${g.label}</span></div></div>`;}).join('');}
+
+function openSpecies(groupKey,sci){const group=getAllGroups().find(g=>g.key===groupKey),s=group?.species.find(sp=>sp.sci===sci);if(!s)return;currentSpecies={groupKey,sci};const key=groupKey+'_'+sci,photo=photos[key],od=observations[key]||{};document.getElementById('modal-name').textContent=s.name;document.getElementById('modal-sci').textContent=s.sci;const wrap=document.getElementById('modal-photo-wrap');if(photo){wrap.className='modal-photo';wrap.innerHTML=`<img src="${photo}" alt="${s.name}">`;}else{wrap.className='modal-photo empty';wrap.innerHTML='<div class="question-mark" style="font-size:56px">?</div><div class="upload-hint">No photo yet</div>';}document.getElementById('modal-remove-btn').innerHTML=photo?'<button class="btn-remove" onclick="removePhoto()">Remove photo</button>':'';document.getElementById('obs-date').value=od.date||'';document.getElementById('obs-time').value=od.time||'';document.getElementById('obs-location').value=od.location||'';document.getElementById('obs-weather').value=od.weather||'';document.getElementById('obs-behavior').value=od.behavior||'';document.getElementById('obs-details').value=od.details||'';document.getElementById('obs-notes').value=od.notes||'';document.getElementById('obs-saved-msg').classList.remove('show');document.getElementById('modal-meta').innerHTML=`<strong>Field notes:</strong> ${s.notes||'No notes available.'}`;document.getElementById('species-modal').style.display='flex';}
+function closeSpeciesModal(){document.getElementById('species-modal').style.display='none';document.getElementById('file-input').value='';currentSpecies=null;}
+function closeModal(e){if(e.target.classList.contains('modal-overlay')){document.querySelectorAll('.modal-overlay').forEach(m=>m.style.display='none');currentSpecies=null;document.getElementById('file-input').value='';}}
+
+function handleUpload(event){const file=event.target.files[0];if(!file||!currentSpecies)return;const reader=new FileReader();reader.onload=async e=>{const key=currentSpecies.groupKey+'_'+currentSpecies.sci,data=e.target.result;setSyncing();try{await sb.from('photos').upsert({user_id:userId,species_key:key,photo_data:data,updated_at:new Date().toISOString()},{onConflict:'user_id,species_key'});photos[key]=data;setSynced();}catch(err){setSyncError();}openSpecies(currentSpecies.groupKey,currentSpecies.sci);renderStats();renderGrid();};reader.readAsDataURL(file);}
+async function removePhoto(){if(!currentSpecies)return;const key=currentSpecies.groupKey+'_'+currentSpecies.sci;setSyncing();try{await sb.from('photos').delete().eq('user_id',userId).eq('species_key',key);delete photos[key];setSynced();}catch(e){setSyncError();}openSpecies(currentSpecies.groupKey,currentSpecies.sci);renderStats();renderGrid();}
+async function saveObs(){if(!currentSpecies)return;const key=currentSpecies.groupKey+'_'+currentSpecies.sci;const od={obs_date:document.getElementById('obs-date').value,obs_time:document.getElementById('obs-time').value,location:document.getElementById('obs-location').value,weather:document.getElementById('obs-weather').value,behavior:document.getElementById('obs-behavior').value,details:document.getElementById('obs-details').value,notes:document.getElementById('obs-notes').value};setSyncing();try{await sb.from('observations').upsert({user_id:userId,species_key:key,...od,updated_at:new Date().toISOString()},{onConflict:'user_id,species_key'});observations[key]={date:od.obs_date,time:od.obs_time,location:od.location,weather:od.weather,behavior:od.behavior,details:od.details,notes:od.notes};setSynced();const msg=document.getElementById('obs-saved-msg');msg.classList.add('show');setTimeout(()=>msg.classList.remove('show'),2000);}catch(e){setSyncError();}}
+
+function showEditGroups(){egMode='manage';egEditKey=null;renderEditGroups();document.getElementById('editgroups-modal').style.display='flex';}
+
+function renderEditGroups(){
+  const body=document.getElementById('editgroups-body');
+  const allG=[...Object.entries(SPECIES_DATA).map(([k,v])=>({key:k,rawKey:k,label:getGroupLabel(k),builtin:true,count:getAllGroups().find(g=>g.key===k)?.species.length??v.species.length})),...Object.entries(customGroups).map(([k,v])=>({key:'custom_'+k,rawKey:k,label:getGroupLabel('custom_'+k)||k,builtin:false,count:(Array.isArray(v)?v:[]).length}))];
+  if(egMode==='manage'){
+    body.innerHTML=`<div class="eg-tabs"><button class="eg-tab active">Manage groups</button><button class="eg-tab" onclick="egMode='add';renderEditGroups()">+ Add new group</button></div><div class="group-list">${allG.map(g=>`<div class="group-row"><div><div class="group-row-name">${g.label}</div><div class="group-row-count">${g.count} species${g.builtin?' · built-in':''}</div></div><div class="group-row-actions"><button class="btn-sm warning" onclick="egRename('${g.key}')">Rename</button><button class="btn-sm primary" onclick="egEdit('${g.key}')">Edit species</button>${!g.builtin?`<button class="btn-sm danger" onclick="egDeleteGroup('${g.rawKey}')">Delete</button>`:''}</div></div>`).join('')}</div>`;
+  }else if(egMode==='rename'){
+    const current=getGroupLabel(egEditKey);
+    body.innerHTML=`<div class="eg-tabs"><button class="eg-tab" onclick="egMode='manage';renderEditGroups()">← Back</button><button class="eg-tab active">Rename group</button></div><p style="font-size:13px;color:var(--ink-faint);font-family:'Lora',serif;font-style:italic;margin-bottom:1rem;">Current name: <strong style="color:var(--ink)">${current}</strong></p><div class="rename-row"><input type="text" id="eg-rename-input" value="${current}" placeholder="New group name"><button class="btn-rename" onclick="egSaveRename()">Save</button></div><div class="inline-err" id="eg-rename-err"></div>`;
+    setTimeout(()=>{const inp=document.getElementById('eg-rename-input');if(inp){inp.focus();inp.select();}},50);
+  }else if(egMode==='add'){
+    body.innerHTML=`<div class="eg-tabs"><button class="eg-tab" onclick="egMode='manage';renderEditGroups()">← Back</button><button class="eg-tab active">Add new group</button></div><div class="field"><label>Group name</label><input type="text" id="eg-new-name" placeholder="e.g. Dragonflies, Mammals..."></div><div class="field"><label>Species — one per line</label><textarea id="eg-new-species" placeholder="Common Name | Scientific Name | Notes&#10;Eastern Darner | Aeshna verticalis | Large blue dragonfly"></textarea><div class="notice">Format: Common Name | Scientific Name | Notes</div></div><button class="btn-primary" onclick="egAddGroup()">Create group</button><div class="inline-err" id="eg-add-err"></div>`;
+  }else if(egMode==='edit'){
+    const isBuiltin=!egEditKey.startsWith('custom_'),group=getAllGroups().find(g=>g.key===egEditKey),species=group?.species||[];
+    body.innerHTML=`<div class="eg-tabs"><button class="eg-tab" onclick="egMode='manage';renderEditGroups()">← Back</button><button class="eg-tab active">Editing: ${group?.label||egEditKey}</button></div><div class="eg-section-title">Current species (${species.length})</div><div class="species-edit-list">${species.map((s,i)=>`<div class="species-edit-row"><div><div class="species-edit-name">${s.name}</div><div class="species-edit-sci">${s.sci}</div></div><button class="btn-sm danger" onclick="egRemoveSpecies(${i})">Remove</button></div>`).join('')||'<div style="color:var(--ink-faint);font-size:13px;font-style:italic;padding:8px 0">No species yet.</div>'}</div><hr class="divider"><div class="eg-section-title">Add species</div><div class="add-species-row"><input type="text" id="eg-sp-name" placeholder="Common name"><input type="text" id="eg-sp-sci" placeholder="Scientific name"><input type="text" id="eg-sp-notes" placeholder="Notes"><button class="btn-add-sp" onclick="egAddSpecies()">Add</button></div><div class="inline-err" id="eg-sp-err"></div>${isBuiltin?'<div class="notice" style="margin-top:8px">Removals on built-in groups are saved per account.</div>':''}`;
+  }
+}
+
+function egRename(key){egMode='rename';egEditKey=key;renderEditGroups();}
+
+async function egSaveRename(){
+  const newName=document.getElementById('eg-rename-input').value.trim();
+  const err=document.getElementById('eg-rename-err');
+  if(!newName){err.textContent='Please enter a name.';return;}
+  setSyncing();
+  try{
+    await sb.from('group_labels').upsert({user_id:userId,group_key:egEditKey,label:newName},{onConflict:'user_id,group_key'});
+    groupLabels[egEditKey]=newName;
+    setSynced();
+  }catch(e){setSyncError();}
+  buildNav();renderStats();renderGrid();
+  egMode='manage';renderEditGroups();
+}
+
+function egEdit(key){egMode='edit';egEditKey=key;renderEditGroups();}
+
+async function egDeleteGroup(rawKey){
+  if(!confirm('Delete group "'+getGroupLabel('custom_'+rawKey)+'"?'))return;
+  setSyncing();
+  try{
+    await sb.from('custom_groups').delete().eq('user_id',userId).eq('group_name',rawKey);
+    await sb.from('group_labels').delete().eq('user_id',userId).eq('group_key','custom_'+rawKey);
+    delete customGroups[rawKey];delete groupLabels['custom_'+rawKey];
+    setSynced();
+  }catch(e){setSyncError();}
+  if(currentGroup==='custom_'+rawKey)currentGroup='snakes';
+  buildNav();renderStats();renderGrid();renderEditGroups();
+}
+
+async function egAddGroup(){
+  const name=document.getElementById('eg-new-name').value.trim(),err=document.getElementById('eg-add-err');
+  if(!name){err.textContent='Please enter a group name.';return;}
+  if(customGroups[name]){err.textContent='That group already exists.';return;}
+  const lines=document.getElementById('eg-new-species').value.split('\n').filter(l=>l.trim()),species=lines.map(l=>{const p=l.split('|');return{name:(p[0]||'').trim(),sci:(p[1]||p[0]||'').trim(),notes:(p[2]||'').trim()};}).filter(s=>s.name);
+  setSyncing();
+  try{
+    await sb.from('custom_groups').upsert({user_id:userId,group_name:name,species_data:species},{onConflict:'user_id,group_name'});
+    customGroups[name]=species;setSynced();
+  }catch(e){setSyncError();}
+  currentGroup='custom_'+name;buildNav();renderStats();renderGrid();egMode='manage';renderEditGroups();
+}
+
+async function egRemoveSpecies(index){
+  const isBuiltin=!egEditKey.startsWith('custom_');setSyncing();
+  try{
+    if(isBuiltin){const sp=getAllGroups().find(g=>g.key===egEditKey)?.species[index];if(sp){await sb.from('removed_species').upsert({user_id:userId,group_key:egEditKey,sci_name:sp.sci},{onConflict:'user_id,group_key,sci_name'});if(!removedSpecies[egEditKey])removedSpecies[egEditKey]=[];removedSpecies[egEditKey].push(sp.sci);}}
+    else{const rk=egEditKey.replace(/^custom_/,'');const updated=(Array.isArray(customGroups[rk])?customGroups[rk]:[]).filter((_,i)=>i!==index);await sb.from('custom_groups').update({species_data:updated}).eq('user_id',userId).eq('group_name',rk);customGroups[rk]=updated;}
+    setSynced();
+  }catch(e){setSyncError();}
+  buildNav();renderStats();renderGrid();renderEditGroups();
+}
+
+async function egAddSpecies(){
+  const name=document.getElementById('eg-sp-name').value.trim(),sci=document.getElementById('eg-sp-sci').value.trim(),notes=document.getElementById('eg-sp-notes').value.trim(),err=document.getElementById('eg-sp-err');
+  if(!name){err.textContent='Species name is required.';return;}
+  if(!egEditKey.startsWith('custom_')){err.textContent='You can only add species to custom groups.';return;}
+  const rk=egEditKey.replace(/^custom_/,'');const updated=[...(Array.isArray(customGroups[rk])?customGroups[rk]:[]),{name,sci:sci||name,notes}];
+  setSyncing();
+  try{await sb.from('custom_groups').update({species_data:updated}).eq('user_id',userId).eq('group_name',rk);customGroups[rk]=updated;setSynced();}catch(e){setSyncError();}
+  document.getElementById('eg-sp-name').value='';document.getElementById('eg-sp-sci').value='';document.getElementById('eg-sp-notes').value='';err.textContent='';
+  buildNav();renderStats();renderGrid();renderEditGroups();
+}
+
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+window.addEventListener('load',()=>{document.getElementById('loading-screen').style.display='none';document.getElementById('auth-screen').style.display='flex';});
+</script>
+</body>
+</html>
